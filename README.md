@@ -26,10 +26,20 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
-## Usage
+## Setup and Usage
 
+1. Initialize the vector database:
 ```bash
-# Start the assistant
+python initialize_db.py
+```
+
+2. Optional: Train the model:
+```bash
+python train.py
+```
+
+3. Start the chatbot:
+```bash
 python main.py
 ```
 
@@ -38,13 +48,25 @@ python main.py
 medical-nlp-assistant/
 ├── src/
 │   ├── __init__.py
-│   ├── model.py      # Language model implementation
+│   ├── model.py      # Model implementation and training functions
 │   ├── rag.py        # RAG system implementation
-│   └── voice.py      # Voice interface components
-├── main.py           # Main application script
+│   ├── voice.py      # Voice interface components
+│   └── preprocess.py # Dataset loading and analysis
+├── main.py           # Interactive chat interface
+├── train.py          # Training script
+├── initialize_db.py  # Database initialization
 ├── requirements.txt  # Project dependencies
 └── README.md        # Documentation
 ```
+
+## Files Description
+- `initialize_db.py`: Creates vector database from medical dataset
+- `train.py`: Handles model fine-tuning and training
+- `main.py`: Runs interactive chatbot interface
+- `src/model.py`: Language model setup and training utilities
+- `src/rag.py`: Retrieval Augmented Generation implementation
+- `src/voice.py`: Text-to-Speech and Speech-to-Text components
+- `src/preprocess.py`: Dataset preprocessing functions
 
 ## Contributors
 - Bellini Emanuele
