@@ -12,7 +12,7 @@ A medical question-answering system using NLP, RAG (Retrieval Augmented Generati
 ## Project Structure
 ```
 medical-nlp-assistant/
-├── NLP.ipynb           # Main implementation notebook
+├── medical_chatbot.ipynb           # Main implementation notebook
 └── README.md          # Documentation
 ```
 
