@@ -1,19 +1,31 @@
+# Machine Learning and NLP libraries
 import torch
-from transformers import AutoTokenizer, AutoModelForCausalLM, DataCollatorForSeq2Seq
-from transformers import Trainer, TrainingArguments
+from transformers import (
+    AutoTokenizer,
+    AutoModelForCausalLM,
+    DataCollatorForSeq2Seq,
+    Seq2SeqTrainer,
+    Seq2SeqTrainingArguments,
+    TextStreamer,
+    TrainingArguments,
+    Trainer,
+)
+from datasets import load_dataset, Dataset, DatasetDict
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
+import lightning as L
 from unsloth import FastLanguageModel, is_bfloat16_supported
-from unsloth.chat_templates import get_chat_template
+from unsloth.chat_templates import get_chat_template, standardize_sharegpt, train_on_responses_only
 from trl import SFTTrainer
-from datasets import load_dataset
 
 def load_model(model_name="unsloth/phi-4"):
-    """Load and configure the language model."""
+    """Load and initialize the model with proper configuration."""
     model, tokenizer = FastLanguageModel.from_pretrained(
         model_name=model_name,
         max_seq_length=2048,
         dtype=None,
         load_in_4bit=True,
     )
+
     model = FastLanguageModel.get_peft_model(
         model,
         r=16,
@@ -24,7 +36,10 @@ def load_model(model_name="unsloth/phi-4"):
         bias="none",
         use_gradient_checkpointing="unsloth",
         random_state=3407,
+        use_rslora=False,
+        loftq_config=None,
     )
+
     return model, tokenizer
 
 def generate_text(model, tokenizer, prompt: str, max_new_tok=50, temperature=0.3):
@@ -55,14 +70,12 @@ def generate_text(model, tokenizer, prompt: str, max_new_tok=50, temperature=0.3
 
     return generated_text
 
-def setup_training(model_name="unsloth/phi-4"):
-    """Setup model and tokenizer for training."""
+def prepare_for_training(model_name="unsloth/phi-4"):
+    """Prepare model and tokenizer for training."""
     model, tokenizer = load_model(model_name)
     tokenizer = get_chat_template(tokenizer, chat_template="phi-4")
-    return model, tokenizer
-
-def prepare_training_data(dataset_name="medalpaca/medical_meadow_medical_flashcards"):
-    """Prepare dataset for training."""
+    
+    # Prepare training data
     alpaca_prompt = """Below is an instruction that describes a task, paired with an input that provides further context. Write a response that appropriately completes the request.
 
 ### Instruction:
@@ -74,22 +87,25 @@ def prepare_training_data(dataset_name="medalpaca/medical_meadow_medical_flashca
 ### Response:
 {}"""
 
+    EOS_TOKEN = tokenizer.eos_token
+
     def formatting_prompts_func(examples):
         instructions = examples["instruction"]
         inputs = examples["input"]
         outputs = examples["output"]
         texts = []
         for instruction, input, output in zip(instructions, inputs, outputs):
-            text = alpaca_prompt.format(instruction, input, output) + tokenizer.eos_token
+            text = alpaca_prompt.format(instruction, input, output) + EOS_TOKEN
             texts.append(text)
         return {"text": texts}
 
-    dataset_mapped = load_dataset(dataset_name, split="train")
+    dataset_mapped = load_dataset("medalpaca/medical_meadow_medical_flashcards", split="train")
     dataset_mapped = dataset_mapped.map(formatting_prompts_func, batched=True)
-    return dataset_mapped
+    
+    return model, tokenizer, dataset_mapped
 
-def train_model(model, tokenizer, dataset_mapped, output_dir="outputs"):
-    """Train the model."""
+def setup_trainer(model, tokenizer, dataset_mapped, output_dir="outputs"):
+    """Configure and return the trainer."""
     trainer = SFTTrainer(
         model=model,
         tokenizer=tokenizer,
@@ -116,5 +132,14 @@ def train_model(model, tokenizer, dataset_mapped, output_dir="outputs"):
             report_to="none",
         ),
     )
-    trainer_stats = trainer.train()
-    return trainer_stats
+    
+    return trainer
+
+def print_gpu_stats():
+    """Print GPU memory usage statistics."""
+    gpu_stats = torch.cuda.get_device_properties(0)
+    used_memory = round(torch.cuda.max_memory_reserved() / 1024 / 1024 / 1024, 3)
+    max_memory = round(gpu_stats.total_memory / 1024 / 1024 / 1024, 3)
+    print(f"GPU = {gpu_stats.name}. Max memory = {max_memory} GB.")
+    print(f"{used_memory} GB of memory reserved.")
+    return used_memory, max_memory
